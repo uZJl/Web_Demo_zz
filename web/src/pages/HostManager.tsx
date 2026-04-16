@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, Table, Tag, Button, Space, Input, Select, Modal, Form, Descriptions, Steps, Badge, Row, Col, Statistic, message, Popconfirm, Drawer, List, Divider } from 'antd';
-import { SearchOutlined, ReloadOutlined, BellOutlined, DesktopOutlined, AlertOutlined, PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { SearchOutlined, ReloadOutlined, DesktopOutlined, PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, MessageOutlined, ShopOutlined, DatabaseOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
 const { Option } = Select;
@@ -23,8 +23,10 @@ interface Task {
   started_at: string;
   completed_at?: string;
   duration?: number;
-  kafka_topic: string;
-  business_line: string;
+  kafka_topic_id?: number;
+  kafka_topic_name?: string;
+  business_line_id?: string;
+  business_line_name?: string;
   // 业务详情字段
   system_page?: string;
   module?: string;
@@ -42,16 +44,6 @@ interface KafkaTopic {
   business_lines: string[];
 }
 
-interface Alert {
-  id: string;
-  host_ip: string;
-  type: string;
-  level: 'warning' | 'critical';
-  message: string;
-  created_at: string;
-  resolved_at?: string;
-}
-
 interface BusinessLine {
   id: string;
   name: string;
@@ -67,7 +59,6 @@ const HostManager: React.FC = () => {
   const [hosts, setHosts] = useState<Host[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [topics, setTopics] = useState<KafkaTopic[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [businessLines, setBusinessLines] = useState<BusinessLine[]>([]);
 
   const [selectedHost, setSelectedHost] = useState<Host | null>(null);
@@ -95,17 +86,15 @@ const HostManager: React.FC = () => {
   // 加载数据
   const loadData = async () => {
     try {
-      const [hostsRes, tasksRes, topicsRes, alertsRes, blRes] = await Promise.all([
+      const [hostsRes, tasksRes, topicsRes, blRes] = await Promise.all([
         axios.get('/api/v1/hosts'),
         axios.get('/api/v1/tasks'),
         axios.get('/api/v1/topics'),
-        axios.get('/api/v1/alerts?resolved=false'),
         axios.get('/api/v1/business-lines'),
       ]);
       setHosts(hostsRes.data);
       setTasks(tasksRes.data);
       setTopics(topicsRes.data);
-      setAlerts(alertsRes.data);
       setBusinessLines(blRes.data);
     } catch (error) {
       console.error('加载数据失败:', error);
@@ -245,15 +234,15 @@ const HostManager: React.FC = () => {
 
   // CRUD: 业务线
   const handleAddBusinessLine = () => {
-    setEditingBusinessLine(null);
+    // 打开新增业务线弹窗，保持管理弹窗打开
+    setEditingBusinessLine('');
     businessLineForm.resetFields();
-    setBusinessLineModalOpen(true);
   };
 
   const handleEditBusinessLine = (bl: string) => {
+    // 打开编辑业务线弹窗，保持管理弹窗打开
     setEditingBusinessLine(bl);
     businessLineForm.setFieldsValue({ name: bl });
-    setBusinessLineModalOpen(true);
   };
 
   const handleDeleteBusinessLine = async (name: string) => {
@@ -276,7 +265,7 @@ const HostManager: React.FC = () => {
         await axios.post('/api/v1/business-lines', values);
         message.success('添加成功');
       }
-      setBusinessLineModalOpen(false);
+      setEditingBusinessLine(null);
       loadData();
     } catch (error: any) {
       message.error(error.response?.data?.error || '操作失败');
@@ -360,24 +349,6 @@ const HostManager: React.FC = () => {
       width: 80,
     },
     {
-      title: '最后活跃',
-      dataIndex: 'last_active_at',
-      key: 'last_active_at',
-      width: 180,
-      render: (time: string) => formatTime(time),
-    },
-    {
-      title: '标签',
-      dataIndex: 'tags',
-      key: 'tags',
-      render: (tags: string[]) => (
-        <>
-          {tags.slice(0, 2).map(tag => <Tag key={tag} color="blue">{tag}</Tag>)}
-          {tags.length > 2 && <Tag>+{tags.length - 2}</Tag>}
-        </>
-      ),
-    },
-    {
       title: '操作',
       key: 'action',
       width: 100,
@@ -414,15 +385,13 @@ const HostManager: React.FC = () => {
     },
     {
       title: 'Kafka Topic',
-      dataIndex: 'kafka_topic',
       key: 'kafka_topic',
-      render: (topic: string) => <Tag>{topic}</Tag>,
+      render: (_: any, record: Task) => <Tag>{record.kafka_topic_name || '-'}</Tag>,
     },
     {
       title: '业务线',
-      dataIndex: 'business_line',
       key: 'business_line',
-      render: (bl: string) => <Tag color="purple">{bl}</Tag>,
+      render: (_: any, record: Task) => <Tag color="purple">{record.business_line_name || '-'}</Tag>,
     },
     {
       title: '操作',
@@ -445,7 +414,6 @@ const HostManager: React.FC = () => {
     alertHosts: hosts.filter(h => h.status === 'alert').length,
     runningTasks: tasks.filter(t => t.status === 'running').length,
     failedTasks: tasks.filter(t => t.status === 'failed').length,
-    unresolvedAlerts: alerts.length,
     businessLines: businessLines.length,
     topics: topics.length,
   };
@@ -477,16 +445,6 @@ const HostManager: React.FC = () => {
         <Col span={4}>
           <Card hoverable>
             <Statistic title="Kafka Topic" value={stats.topics} valueStyle={{ color: '#722ed1' }} />
-          </Card>
-        </Col>
-        <Col span={4}>
-          <Card hoverable>
-            <Statistic
-              title="未解决告警"
-              value={stats.unresolvedAlerts}
-              valueStyle={{ color: stats.unresolvedAlerts > 0 ? '#f5222d' : '#3f8600' }}
-              prefix={<AlertOutlined />}
-            />
           </Card>
         </Col>
       </Row>
@@ -570,21 +528,6 @@ const HostManager: React.FC = () => {
             <Descriptions bordered column={2} size="small">
               <Descriptions.Item label="任务ID">{selectedTask.task_id}</Descriptions.Item>
               <Descriptions.Item label="物理机IP">{selectedTask.host_ip}</Descriptions.Item>
-              <Descriptions.Item label="状态">
-                <Badge status={getTaskStatusColor(selectedTask.status)} text={selectedTask.status} />
-              </Descriptions.Item>
-              <Descriptions.Item label="运行时长">
-                {selectedTask.duration ? `${Math.round(selectedTask.duration / 60000)}分钟` : '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="开始时间">{formatTime(selectedTask.started_at)}</Descriptions.Item>
-              <Descriptions.Item label="结束时间">
-                {selectedTask.completed_at ? formatTime(selectedTask.completed_at) : '-'}
-              </Descriptions.Item>
-              {selectedTask.error && (
-                <Descriptions.Item label="错误信息" span={2}>
-                  <span style={{ color: 'red' }}>{selectedTask.error}</span>
-                </Descriptions.Item>
-              )}
             </Descriptions>
 
             <div style={{ marginTop: 24 }}>
@@ -594,49 +537,84 @@ const HostManager: React.FC = () => {
                 size="small"
                 items={[
                   {
-                    title: '任务',
+                    title: <span style={{ fontWeight: 500, color: '#333' }}>任务</span>,
+                    icon: <PlayCircleOutlined style={{ color: '#52c41a', fontSize: 20 }} />,
                     description: (
-                      <div>
-                        <div style={{ fontWeight: 'bold' }}>{selectedTask.name}</div>
-                        <div style={{ color: '#888', fontSize: 12 }}>IP: {selectedTask.host_ip}</div>
+                      <div style={{ border: '1px solid #e8e8e8', borderRadius: 6, padding: 12, background: '#fafafa' }}>
+                        <div style={{ marginBottom: 6 }}>
+                          <span style={{ color: '#888', fontSize: 12 }}>任务名称：</span>
+                          <span style={{ fontWeight: 'bold' }}>{selectedTask.name}</span>
+                        </div>
+                        <div>
+                          <span style={{ color: '#888', fontSize: 12 }}>物理机IP：</span>
+                          <Tag color="green">{selectedTask.host_ip}</Tag>
+                        </div>
                       </div>
                     ),
                     status: 'process',
                   },
                   {
-                    title: 'Kafka',
+                    title: <span style={{ fontWeight: 500, color: '#333' }}>Kafka</span>,
+                    icon: <MessageOutlined style={{ color: '#1890ff', fontSize: 20 }} />,
                     description: (
-                      <div>
-                        <Tag color="blue">{selectedTask.kafka_topic}</Tag>
-                        <div style={{ color: '#888', fontSize: 12, marginTop: 4 }}>
-                          消费者组: {topics.find(t => t.topic_name === selectedTask.kafka_topic)?.consumer_group || '-'}
+                      <div style={{ border: '1px solid #e8e8e8', borderRadius: 6, padding: 12, background: '#fafafa' }}>
+                        <div style={{ marginBottom: 6 }}>
+                          <span style={{ color: '#888', fontSize: 12 }}>Topic：</span>
+                          <Tag color="blue">{selectedTask.kafka_topic_name}</Tag>
+                        </div>
+                        <div style={{ marginBottom: 6 }}>
+                          <span style={{ color: '#888', fontSize: 12 }}>生产者组：</span>
+                          <span>{topics.find(t => t.id === selectedTask.kafka_topic_id)?.producer_group || '-'}</span>
+                        </div>
+                        <div>
+                          <span style={{ color: '#888', fontSize: 12 }}>消费者组：</span>
+                          <span>{topics.find(t => t.id === selectedTask.kafka_topic_id)?.consumer_group || '-'}</span>
                         </div>
                       </div>
                     ),
                     status: 'wait',
                   },
                   {
-                    title: '业务',
-                    description: (
-                      <div>
-                        <Tag color="purple">{selectedTask.business_line}</Tag>
-                        {selectedTask.module && <Tag color="cyan">{selectedTask.module}</Tag>}
-                        {selectedTask.system_page && (
-                          <div style={{ color: '#888', fontSize: 12, marginTop: 4 }}>
-                            页面: {selectedTask.system_page}
+                    title: <span style={{ fontWeight: 500, color: '#333' }}>业务</span>,
+                    icon: <ShopOutlined style={{ color: '#722ed1', fontSize: 20 }} />,
+                    description: (() => {
+                      const bl = businessLines.find(b => b.id === selectedTask.business_line_id);
+                      return (
+                        <div style={{ border: '1px solid #e8e8e8', borderRadius: 6, padding: 12, background: '#fafafa' }}>
+                          <div style={{ marginBottom: 6 }}>
+                            <span style={{ color: '#888', fontSize: 12 }}>业务线：</span>
+                            <Tag color="purple">{bl?.name || selectedTask.business_line_name}</Tag>
                           </div>
-                        )}
-                      </div>
-                    ),
+                          {(bl?.system_page || selectedTask.system_page) && (
+                            <div style={{ marginBottom: 6 }}>
+                              <span style={{ color: '#888', fontSize: 12 }}>系统页面：</span>
+                              <Tag color="blue">{bl?.system_page || selectedTask.system_page}</Tag>
+                            </div>
+                          )}
+                          {(bl?.module || selectedTask.module) && (
+                            <div>
+                              <span style={{ color: '#888', fontSize: 12 }}>功能模块：</span>
+                              <Tag color="cyan">{bl?.module || selectedTask.module}</Tag>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })(),
                     status: 'wait',
                   },
                   {
-                    title: '数据',
-                    description: selectedTask.data_fields?.length ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {selectedTask.data_fields.map(f => <Tag key={f} color="orange">{f}</Tag>)}
+                    title: <span style={{ fontWeight: 500, color: '#333' }}>数据</span>,
+                    icon: <DatabaseOutlined style={{ color: '#fa541c', fontSize: 20 }} />,
+                    description: (
+                      <div style={{ border: '1px solid #e8e8e8', borderRadius: 6, padding: 12, background: '#fafafa' }}>
+                        <span style={{ color: '#888', fontSize: 12 }}>数据字段：</span>
+                        {selectedTask.data_fields?.length ? (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                            {selectedTask.data_fields.map(f => <Tag key={f} color="orange">{f}</Tag>)}
+                          </div>
+                        ) : <span style={{ color: '#888' }}>-</span>}
                       </div>
-                    ) : '-',
+                    ),
                     status: 'wait',
                   },
                 ]}
@@ -681,11 +659,6 @@ const HostManager: React.FC = () => {
               <Option value="alert">告警</Option>
             </Select>
           </Form.Item>
-          <Form.Item name="tags" label="标签">
-            <Select mode="tags" placeholder="选择或输入标签">
-              {businessLines.map(bl => <Option key={bl.name} value={bl.name}>{bl.name}</Option>)}
-            </Select>
-          </Form.Item>
         </Form>
       </Modal>
 
@@ -713,38 +686,18 @@ const HostManager: React.FC = () => {
               <Option value="failed">失败</Option>
             </Select>
           </Form.Item>
-          <Form.Item name="kafka_topic" label="Kafka Topic" rules={[{ required: true, message: '请输入 Topic' }]}>
+          <Form.Item name="kafka_topic_id" label="Kafka Topic" rules={[{ required: true, message: '请选择 Topic' }]}>
             <Select
-              placeholder="选择或输入 Topic"
+              placeholder="选择 Topic"
               showSearch
               allowClear
-              dropdownRender={(menu) => (
-                <>
-                  {menu}
-                  <Divider style={{ margin: '8px 0' }} />
-                  <div style={{ padding: '4px 8px' }}>
-                    <Input
-                      placeholder="输入新 Topic 后按回车"
-                      value={newTopicInput}
-                      onChange={(e) => setNewTopicInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && newTopicInput.trim()) {
-                          taskForm.setFieldsValue({ kafka_topic: newTopicInput.trim() });
-                          setNewTopicInput('');
-                          e.preventDefault();
-                        }
-                      }}
-                    />
-                  </div>
-                </>
-              )}
             >
-              {topics.map(t => <Option key={t.topic_name} value={t.topic_name}>{t.topic_name}</Option>)}
+              {topics.map(t => <Option key={t.id} value={t.id}>{t.topic_name}</Option>)}
             </Select>
           </Form.Item>
-          <Form.Item name="business_line" label="业务线" rules={[{ required: true, message: '请选择业务线' }]}>
+          <Form.Item name="business_line_id" label="业务线" rules={[{ required: true, message: '请选择业务线' }]}>
             <Select placeholder="选择业务线">
-              {businessLines.map(bl => <Option key={bl.name} value={bl.name}>{bl.name}</Option>)}
+              {businessLines.map(bl => <Option key={bl.id} value={bl.id}>{bl.name}</Option>)}
             </Select>
           </Form.Item>
           <Form.Item name="system_page" label="系统页面">
@@ -756,16 +709,6 @@ const HostManager: React.FC = () => {
           <Form.Item name="data_fields" label="数据字段">
             <Input placeholder="输入多个值，用逗号分隔，如: sku,price,stock" />
           </Form.Item>
-          {editingTask && (
-            <>
-              <Form.Item name="started_at" label="开始时间">
-                <Input type="datetime-local" />
-              </Form.Item>
-              <Form.Item name="error" label="错误信息">
-                <Input.TextArea rows={2} placeholder="错误信息（可选）" />
-              </Form.Item>
-            </>
-          )}
         </Form>
       </Modal>
 
@@ -795,10 +738,7 @@ const HostManager: React.FC = () => {
                 </Popconfirm>
               ]}
             >
-              <div>
-                <Tag color="purple" style={{ fontSize: 14, padding: '4px 12px' }}>{item.name}</Tag>
-                {item.module && <Tag color="blue">{item.module}</Tag>}
-              </div>
+              <Tag color="purple" style={{ fontSize: 14, padding: '4px 12px' }}>{item.name}</Tag>
             </List.Item>
           )}
         />
@@ -807,7 +747,7 @@ const HostManager: React.FC = () => {
       {/* 业务线编辑弹窗 */}
       <Modal
         title={editingBusinessLine ? '编辑业务线' : '新增业务线'}
-        open={businessLineModalOpen && !!editingBusinessLine}
+        open={editingBusinessLine !== null}
         onOk={handleSaveBusinessLine}
         onCancel={() => setEditingBusinessLine(null)}
       >
@@ -831,26 +771,46 @@ const HostManager: React.FC = () => {
             关闭
           </Button>,
         ]}
+        width={700}
       >
-        <List
+        <Table
           size="small"
           dataSource={topics}
-          renderItem={(item: KafkaTopic) => (
-            <List.Item
-              actions={[
-                <Button key="edit" type="link" size="small" icon={<EditOutlined />} onClick={() => handleEditTopic(item)} />,
-                <Popconfirm key="delete" title="确定删除?" onConfirm={() => handleDeleteTopic(item.topic_name)}>
-                  <Button type="link" size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
-              ]}
-            >
-              <div>
-                <Tag color="blue">{item.topic_name}</Tag>
-                {item.producer_group && <Tag color="green">生产者: {item.producer_group}</Tag>}
-                {item.consumer_group && <Tag color="orange">消费者: {item.consumer_group}</Tag>}
-              </div>
-            </List.Item>
-          )}
+          rowKey="id"
+          pagination={false}
+          columns={[
+            {
+              title: 'Topic',
+              dataIndex: 'topic_name',
+              key: 'topic_name',
+              render: (text: string) => <Tag color="blue">{text}</Tag>,
+            },
+            {
+              title: '生产者组',
+              dataIndex: 'producer_group',
+              key: 'producer_group',
+              render: (text: string) => text || '-',
+            },
+            {
+              title: '消费者组',
+              dataIndex: 'consumer_group',
+              key: 'consumer_group',
+              render: (text: string) => text || '-',
+            },
+            {
+              title: '操作',
+              key: 'action',
+              width: 100,
+              render: (_: any, record: KafkaTopic) => (
+                <Space>
+                  <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEditTopic(record)} />
+                  <Popconfirm title="确定删除?" onConfirm={() => handleDeleteTopic(record.topic_name)}>
+                    <Button type="link" size="small" danger icon={<DeleteOutlined />} />
+                  </Popconfirm>
+                </Space>
+              ),
+            },
+          ]}
         />
       </Modal>
 

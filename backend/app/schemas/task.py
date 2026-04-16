@@ -9,8 +9,8 @@ class TaskBase(BaseModel):
     name: str
     host_ip: Optional[str] = None
     status: str = "pending"
-    kafka_topic: Optional[str] = None
-    business_line: Optional[str] = None
+    kafka_topic_id: Optional[int] = None
+    business_line_id: Optional[str] = None
     system_page: Optional[str] = None
     module: Optional[str] = None
     data_fields: Optional[List[str]] = []
@@ -27,8 +27,8 @@ class TaskUpdate(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     duration: Optional[int] = None
-    kafka_topic: Optional[str] = None
-    business_line: Optional[str] = None
+    kafka_topic_id: Optional[int] = None
+    business_line_id: Optional[str] = None
     system_page: Optional[str] = None
     module: Optional[str] = None
     data_fields: Optional[List[str]] = None
@@ -37,6 +37,8 @@ class TaskUpdate(BaseModel):
 
 class TaskResponse(TaskBase):
     id: int
+    kafka_topic_name: Optional[str] = None
+    business_line_name: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     duration: Optional[int] = None

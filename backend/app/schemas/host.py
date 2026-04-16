@@ -9,7 +9,6 @@ class HostBase(BaseModel):
     hostname: Optional[str] = None
     status: str = "offline"
     task_count: int = 0
-    tags: List[str] = []
 
 
 class HostCreate(HostBase):
@@ -20,7 +19,6 @@ class HostUpdate(BaseModel):
     hostname: Optional[str] = None
     status: Optional[str] = None
     task_count: Optional[int] = None
-    tags: Optional[List[str]] = None
     last_active_at: Optional[datetime] = None
 
 

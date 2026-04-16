@@ -18,12 +18,52 @@ async def list_hosts(
     db: AsyncSession = Depends(get_db)
 ):
     """获取物理机列表"""
-    query = select(Host)
+    from sqlalchemy import func
+
+    # 子查询：统计每个 host_ip 的任务数量
+    task_count_subquery = (
+        select(
+            Task.host_ip,
+            func.count(Task.id).label('task_count')
+        )
+        .group_by(Task.host_ip)
+        .subquery()
+    )
+
+    # 主查询：关联 Host 和任务统计
+    query = (
+        select(
+            Host.ip,
+            Host.hostname,
+            Host.status,
+            Host.last_active_at,
+            Host.created_at,
+            Host.updated_at,
+            func.coalesce(task_count_subquery.c.task_count, 0).label('task_count')
+        )
+        .outerjoin(task_count_subquery, Host.ip == task_count_subquery.c.host_ip)
+    )
+
     if status:
         query = query.where(Host.status == status)
     query = query.order_by(Host.last_active_at.desc().nullslast())
+
     result = await db.execute(query)
-    return result.scalars().all()
+    rows = result.all()
+
+    # 构建返回结果
+    return [
+        HostResponse(
+            ip=row.ip,
+            hostname=row.hostname,
+            status=row.status,
+            task_count=row.task_count,
+            last_active_at=row.last_active_at,
+            created_at=row.created_at,
+            updated_at=row.updated_at
+        )
+        for row in rows
+    ]
 
 
 @router.get("/{ip}", response_model=HostWithTasks)
@@ -46,7 +86,6 @@ async def get_host(ip: str, db: AsyncSession = Depends(get_db)):
         status=host.status,
         task_count=host.task_count,
         last_active_at=host.last_active_at,
-        tags=host.tags or [],
         created_at=host.created_at,
         updated_at=host.updated_at,
         tasks=[TaskResponse(
@@ -80,8 +119,7 @@ async def create_host(host: HostCreate, db: AsyncSession = Depends(get_db)):
         ip=host.ip,
         hostname=host.hostname,
         status=host.status,
-        task_count=host.task_count,
-        tags=host.tags
+        task_count=host.task_count
     )
     db.add(db_host)
     await db.commit()
@@ -114,6 +152,12 @@ async def delete_host(ip: str, db: AsyncSession = Depends(get_db)):
     host = result.scalar_one_or_none()
     if not host:
         raise HTTPException(status_code=404, detail="Host not found")
+
+    # 先删除该物理机关联的所有任务
+    tasks_result = await db.execute(select(Task).where(Task.host_ip == ip))
+    tasks = tasks_result.scalars().all()
+    for task in tasks:
+        await db.delete(task)
 
     await db.delete(host)
     await db.commit()

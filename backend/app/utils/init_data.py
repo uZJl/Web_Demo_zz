@@ -6,7 +6,6 @@ import random
 
 from app.models.host import Host
 from app.models.task import Task
-from app.models.alert import Alert
 from app.models.business_line import BusinessLine
 from app.models.kafka_topic import KafkaTopic
 from app.database import Base
@@ -33,17 +32,13 @@ def init_sample_data(database_url: str = "sqlite:///./testergizer.db"):
         # 创建物理机
         hosts = [
             Host(ip="192.168.1.10", hostname="crawler-01", status="online",
-                 task_count=5, last_active_at=datetime.utcnow() - timedelta(minutes=5),
-                 tags=["crawler", "product"]),
+                 task_count=5, last_active_at=datetime.utcnow() - timedelta(minutes=5)),
             Host(ip="192.168.1.11", hostname="crawler-02", status="online",
-                 task_count=3, last_active_at=datetime.utcnow() - timedelta(minutes=2),
-                 tags=["crawler", "inventory"]),
+                 task_count=3, last_active_at=datetime.utcnow() - timedelta(minutes=2)),
             Host(ip="192.168.1.12", hostname="crawler-03", status="alert",
-                 task_count=8, last_active_at=datetime.utcnow() - timedelta(hours=1),
-                 tags=["crawler", "pricing"]),
+                 task_count=8, last_active_at=datetime.utcnow() - timedelta(hours=1)),
             Host(ip="192.168.1.13", hostname="crawler-04", status="offline",
-                 task_count=0, last_active_at=datetime.utcnow() - timedelta(days=1),
-                 tags=["crawler", "review"]),
+                 task_count=0, last_active_at=datetime.utcnow() - timedelta(days=1)),
         ]
         session.add_all(hosts)
 
@@ -77,50 +72,23 @@ def init_sample_data(database_url: str = "sqlite:///./testergizer.db"):
         ]
         session.add_all(topics)
 
-        # 创建任务
-        tasks = []
-        task_names = [
-            ("爬取天猫商品", "product-updates", "产品数据采集"),
-            ("监控库存变化", "inventory-alerts", "库存监控"),
-            ("追踪价格波动", "price-changes", "价格追踪"),
-            ("分析评论情感", "review-data", "评论分析"),
-            ("同步商品信息", "product-updates", "产品数据采集"),
-            ("检查缺货商品", "inventory-alerts", "库存监控"),
-            ("竞品价格对比", "price-changes", "价格追踪"),
+        # 创建任务 - 使用 ID 关联
+        tasks = [
+            Task(task_id="task-001", name="爬取天猫商品", host_ip="192.168.1.10", status="completed",
+                 started_at=datetime.utcnow() - timedelta(hours=2), completed_at=datetime.utcnow() - timedelta(hours=1, minutes=50),
+                 duration=600000, kafka_topic_id=1, business_line_id="bl-1"),
+            Task(task_id="task-002", name="监控库存变化", host_ip="192.168.1.11", status="running",
+                 started_at=datetime.utcnow() - timedelta(minutes=30), kafka_topic_id=2, business_line_id="bl-2"),
+            Task(task_id="task-003", name="追踪价格波动", host_ip="192.168.1.10", status="failed",
+                 started_at=datetime.utcnow() - timedelta(hours=3), completed_at=datetime.utcnow() - timedelta(hours=2, minutes=59),
+                 duration=60000, kafka_topic_id=3, business_line_id="bl-3", error="Connection timeout"),
+            Task(task_id="task-004", name="分析评论情感", host_ip="192.168.1.12", status="completed",
+                 started_at=datetime.utcnow() - timedelta(hours=5), completed_at=datetime.utcnow() - timedelta(hours=4, minutes=30),
+                 duration=1800000, kafka_topic_id=4, business_line_id="bl-4"),
+            Task(task_id="task-005", name="同步商品信息", host_ip="192.168.1.11", status="pending",
+                 kafka_topic_id=1, business_line_id="bl-1"),
         ]
-
-        statuses = ["running", "completed", "failed", "pending"]
-        for i, (name, topic, bl) in enumerate(task_names):
-            host = random.choice(hosts)
-            status = random.choice(statuses)
-            started = datetime.utcnow() - timedelta(minutes=random.randint(10, 120))
-            duration = random.randint(1000, 300000) if status != "running" else None
-
-            task = Task(
-                task_id=f"task-{i+1:03d}",
-                name=name,
-                host_ip=host.ip,
-                status=status,
-                started_at=started,
-                completed_at=started + timedelta(milliseconds=duration) if duration else None,
-                duration=duration,
-                kafka_topic=topic,
-                business_line=bl,
-                error="Connection timeout" if status == "failed" else None
-            )
-            tasks.append(task)
         session.add_all(tasks)
-
-        # 创建告警
-        alerts = [
-            Alert(id="alert-1", host_ip="192.168.1.12", type="cpu",
-                 level="critical", message="CPU 使用率 95%"),
-            Alert(id="alert-2", host_ip="192.168.1.12", type="memory",
-                 level="warning", message="内存使用率 85%"),
-            Alert(id="alert-3", host_ip="192.168.1.10", type="network",
-                 level="warning", message="网络延迟过高"),
-        ]
-        session.add_all(alerts)
 
         session.commit()
         print("Sample data initialized successfully!")

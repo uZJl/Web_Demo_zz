@@ -31,8 +31,14 @@ async def get_topic(topic_name: str, db: AsyncSession = Depends(get_db)):
 @router.get("/{topic_name}/tasks", response_model=List[dict])
 async def get_topic_tasks(topic_name: str, db: AsyncSession = Depends(get_db)):
     """获取 Topic 关联的任务"""
+    # 先获取 topic 的 id
+    topic_result = await db.execute(select(KafkaTopic).where(KafkaTopic.topic_name == topic_name))
+    topic = topic_result.scalar_one_or_none()
+    if not topic:
+        return []
+
     result = await db.execute(
-        select(Task).where(Task.kafka_topic == topic_name).order_by(Task.started_at.desc())
+        select(Task).where(Task.kafka_topic_id == topic.id).order_by(Task.started_at.desc())
     )
     tasks = result.scalars().all()
     return [
@@ -41,7 +47,6 @@ async def get_topic_tasks(topic_name: str, db: AsyncSession = Depends(get_db)):
             "name": t.name,
             "host_ip": t.host_ip,
             "status": t.status,
-            "business_line": t.business_line
         }
         for t in tasks
     ]
@@ -81,6 +86,17 @@ async def delete_topic(topic_name: str, db: AsyncSession = Depends(get_db)):
     topic = result.scalar_one_or_none()
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
+
+    # 检查是否有任务关联该 Topic
+    tasks_result = await db.execute(
+        select(Task).where(Task.kafka_topic_id == topic.id)
+    )
+    tasks = tasks_result.scalars().all()
+    if tasks:
+        raise HTTPException(
+            status_code=400,
+            detail=f"该 Topic 已被 {len(tasks)} 个任务关联，无法删除"
+        )
 
     await db.delete(topic)
     await db.commit()

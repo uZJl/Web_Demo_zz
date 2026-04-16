@@ -5,7 +5,6 @@ from datetime import datetime
 
 
 class BusinessLineBase(BaseModel):
-    id: str
     name: str
     system_page: Optional[str] = None
     module: Optional[str] = None
@@ -30,6 +29,7 @@ class BusinessLineUpdate(BaseModel):
 
 
 class BusinessLineResponse(BusinessLineBase):
+    id: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

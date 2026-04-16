@@ -75,6 +75,18 @@ async def delete_business_line(name: str, db: AsyncSession = Depends(get_db)):
     if not bl:
         raise HTTPException(status_code=404, detail="Business line not found")
 
+    # 检查是否有任务关联该业务线
+    from app.models.task import Task
+    tasks_result = await db.execute(
+        select(Task).where(Task.business_line_id == bl.id)
+    )
+    tasks = tasks_result.scalars().all()
+    if tasks:
+        raise HTTPException(
+            status_code=400,
+            detail=f"该业务线已被 {len(tasks)} 个任务关联，无法删除"
+        )
+
     await db.delete(bl)
     await db.commit()
     return None

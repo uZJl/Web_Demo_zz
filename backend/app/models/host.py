@@ -12,6 +12,5 @@ class Host(Base):
     status = Column(String(20), default="offline")  # online, offline, alert
     task_count = Column(Integer, default=0)
     last_active_at = Column(DateTime, nullable=True)
-    tags = Column(JSON, default=list)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

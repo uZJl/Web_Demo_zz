@@ -24,11 +24,10 @@ app.add_middleware(
 
 
 # 注册路由
-from app.routers import hosts, tasks, alerts, topics, business_lines, reports, recordings, test_run
+from app.routers import hosts, tasks, topics, business_lines, reports, recordings, test_run
 
 app.include_router(hosts.router)
 app.include_router(tasks.router)
-app.include_router(alerts.router)
 app.include_router(topics.router)
 app.include_router(business_lines.router)
 app.include_router(reports.router)
